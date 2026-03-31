@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Consolidation Plot: Spline Curves + Data Table & Export</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- html2canvas for JPEG export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Papaparse for robust CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #eef2f7 0%, #e0e8f0 100%);
+            margin: 0;
+            padding: 24px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .dashboard {
+            max-width: 1600px;
+            width: 100%;
+            background: white;
+            border-radius: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #0a2b3b 0%, #1a4a62 100%);
+            color: white;
+            padding: 1.6rem 2rem;
+        }
+
+        .header h1 {
+            margin: 0 0 0.35rem 0;
+            font-weight: 700;
+            font-size: 1.9rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header h1:before {
+            content: "📊";
+            font-size: 2rem;
+        }
+
+        .header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        .controls {
+            padding: 1.5rem 2rem;
+            background: #fafdff;
+            border-bottom: 1px solid #e2edf5;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.2rem;
+            align-items: flex-end;
+            justify-content: space-between;
+        }
+
+        .input-area {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            flex: 3;
+            align-items: flex-end;
+        }
+
+        .file-group {
+            flex: 2;
+            min-width: 260px;
+        }
+
+        .file-group label {
+            display: block;
+            font-weight: 700;
+            color: #1e4a6b;
+            margin-bottom: 6px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .file-input {
+            width: 100%;
+            padding: 11px 16px;
+            background: white;
+            border: 1.5px solid #cde0ec;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            transition: 0.2s;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .file-input:hover {
+            border-color: #2c7fb8;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: white;
+            border: 1.5px solid #cde0ec;
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.85rem;
+            color: #1f5a7e;
+        }
+
+        .btn-primary {
+            background: #236b8e;
+            border-color: #236b8e;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0f4b66;
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: #2c7a4d;
+            border-color: #2c7a4d;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #1e5a38;
+        }
+
+        .btn-outline {
+            border-color: #2c7fb8;
+            color: #2c7fb8;
+        }
+
+        .btn-outline:hover {
+            background: #eef5fa;
+        }
+
+        .info-chip {
+            font-size: 0.75rem;
+            background: #e9f2f7;
+            padding: 6px 18px;
+            border-radius: 50px;
+            color: #1a5a7a;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-container {
+            padding: 1.5rem 1.8rem 0.5rem 1.8rem;
+            background: #ffffff;
+            min-height: 500px;
+        }
+
+        canvas {
+            width: 100%;
+            max-height: 550px;
+            height: auto;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .data-section {
+            padding: 1rem 2rem 2rem 2rem;
+            background: #ffffff;
+            border-top: 1px solid #e9f0f5;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.2rem;
+        }
+
+        .section-header h3 {
+            margin: 0;
+            color: #1e4a6b;
+            font-size: 1.3rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 20px;
+            border: 1px solid #e2edf5;
+            background: white;
+            margin-bottom: 1rem;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            min-width: 600px;
+        }
+
+        .data-table th {
+            background: #f0f6fc;
+            padding: 12px 10px;
+            text-align: center;
+            font-weight: 700;
+            color: #1e4a6b;
+            border-bottom: 2px solid #cde0ec;
+        }
+
+        .data-table td {
+            padding: 8px 10px;
+            text-align: center;
+            border-bottom: 1px solid #e9f0f5;
+            color: #2c3e50;
+        }
+
+        .data-table tr:hover {
+            background: #f8fbfe;
+        }
+
+        .file-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 18px;
+            align-items: center;
+        }
+
+        .badge {
+            background: #f4fafd;
+            padding: 6px 16px;
+            border-radius: 40px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #1f5a7a;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            border-left: 4px solid;
+        }
+
+        .badge button {
+            background: none;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            color: #c95a4a;
+            font-size: 1.1rem;
+            padding: 0 6px;
+        }
+
+        .badge button:hover {
+            color: #b13b2a;
+        }
+
+        .info-message {
+            color: #1f5a7a;
+            font-size: 0.85rem;
+            background: #eff8fe;
+            padding: 12px 20px;
+            border-radius: 24px;
+            margin-top: 12px;
+            border-left: 4px solid #2c7fb8;
+        }
+
+        footer {
+            font-size: 0.7rem;
+            text-align: center;
+            padding: 1rem;
+            color: #5c819b;
+            background: #fbfefe;
+            border-top: 1px solid #e6f0f5;
+        }
+
+        @media (max-width: 720px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .input-area {
+                flex-direction: column;
+            }
+            .section-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <div class="header">
+        <h1>Consolidation Plot: Spline Curves + Data Summary</h1>
+        <p>Load (kN) vs Displacement (mm) — Smooth spline curves | Column A = Displacement (mm) | Column B = Load (kN)</p>
+    </div>
+
+    <div class="controls">
+        <div class="input-area">
+            <div class="file-group">
+                <label>📂 SELECT CSV FILES (multiple allowed)</label>
+                <input type="file" id="csvFilesInput" multiple accept=".csv, .text/csv, .txt, .CSV" class="file-input">
+            </div>
+            <div class="button-group">
+                <button id="plotBtn" class="btn btn-primary">📈 PLOT SPLINE CURVES</button>
+                <button id="clearAllBtn" class="btn btn-outline">🗑 CLEAR ALL</button>
+            </div>
+        </div>
+        <div class="info-chip">
+            <span>🌀 SPLINE MODE — smooth lines, no markers</span>
+        </div>
+    </div>
+
+    <div class="chart-container" id="chartContainer">
+        <canvas id="consolidationSplineChart" width="1000" height="520" style="width:100%; max-height:550px; height:auto;"></canvas>
+    </div>
+
+    <div class="data-section" id="dataSection">
+        <div class="section-header">
+            <h3>📋 Consolidated Data Sheet</h3>
+            <div class="export-buttons">
+                <button id="exportJPEGBtn" class="btn btn-success">📸 Export as JPEG</button>
+            </div>
+        </div>
+        <div class="file-badges" id="fileBadgesContainer">
+            <span style="color:#6f9aba;">📁 No datasets — upload CSV files to view consolidated data table</span>
+        </div>
+        <div class="table-wrapper" id="tableWrapper">
+            <table class="data-table" id="consolidatedTable">
+                <thead>
+                    <tr>
+                        <th>Curve Name</th>
+                        <th>Data Points</th>
+                        <th>Min Disp (mm)</th>
+                        <th>Max Disp (mm)</th>
+                        <th>Min Load (kN)</th>
+                        <th>Max Load (kN)</th>
+                        <th>Avg Load (kN)</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="7" style="text-align:center;">No data available. Upload CSV files.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="infoMessage" class="info-message">
+            💡 <strong>Spline Curves + Data Summary</strong> : All curves are smooth connected lines. The table below shows consolidated statistics for each dataset. Use JPEG export to save the graph.
+        </div>
+    </div>
+    <footer>
+        ✅ Smooth spline visualization + consolidated data table | Click JPEG export to save the graph
+    </footer>
+</div>
+
+<script>
+    // ------------------- GLOBALS -------------------
+    let mainChart = null;
+    let activeDatasets = []; // each: { label, dataPoints: [{x,y}], color, id, stats }
+    let colorCycle = 0;
+    
+    const palette = [
+        '#D62728', '#1F77B4', '#2CA02C', '#FF7F0E', '#9467BD', '#8C564B', '#E377C2', '#7F7F7F', '#BCBD22', '#17BECF',
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#D4A5A5', '#9B59B6', '#3498DB', '#E67E22', '#2ECC71',
+        '#E74C3C', '#1ABC9C', '#F1C40F', '#34495E', '#7F8C8D', '#C0392B', '#2980B9', '#27AE60', '#F39C12', '#8E44AD',
+        '#16A085', '#D35400', '#BDC3C7', '#2C3E50', '#F4D03F', '#5DADE2', '#EC7063'
+    ];
+    
+    function getNewColor() { 
+        return palette[colorCycle++ % palette.length]; 
+    }
+    
+    function resetColorCycle() { 
+        colorCycle = 0; 
+    }
+    
+    function makeLabel(filename) {
+        let base = filename.replace(/\.(csv|txt|CSV|TXT)$/i, '');
+        if (base.length > 35) base = base.substring(0, 32) + '...';
+        return base;
+    }
+    
+    // Calculate statistics for a dataset
+    function computeStats(points, label) {
+        if (!points.length) return null;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, sumY = 0;
+        for (let p of points) {
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+            sumY += p.y;
+        }
+        return {
+            label: label,
+            count: points.length,
+            minDisp: minX,
+            maxDisp: maxX,
+            minLoad: minY,
+            maxLoad: maxY,
+            avgLoad: sumY / points.length
+        };
+    }
+    
+    // Parse CSV: column A = displacement (mm), column B = load (kN)
+    function parseCsvToPoints(file, fileName) {
+        return new Promise((resolve, reject) => {
+            Papa.parse(file, {
+                header: false,
+                skipEmptyLines: true,
+                dynamicTyping: true,
+                complete: (results) => {
+                    const rows = results.data;
+                    if (!rows || rows.length === 0) {
+                        reject(new Error(`File "${fileName}" is empty.`));
+                        return;
+                    }
+                    const points = [];
+                    for (let i = 0; i < rows.length; i++) {
+                        const row = rows[i];
+                        if (!row || row.length < 2) continue;
+                        const x = parseFloat(row[0]);
+                        const y = parseFloat(row[1]);
+                        if (!isNaN(x) && !isNaN(y) && isFinite(x) && isFinite(y)) {
+                            points.push({ x: x, y: y });
+                        }
+                    }
+                    if (points.length === 0) {
+                        reject(new Error(`No valid numeric pairs in "${fileName}". Need col A (mm) and col B (kN).`));
+                        return;
+                    }
+                    points.sort((a,b) => a.x - b.x);
+                    resolve(points);
+                },
+                error: (err) => reject(new Error(`Parse error: ${err.message}`))
+            });
+        });
+    }
+    
+    // Update badges and consolidated data table
+    function updateUI() {
+        updateBadgePanel();
+        updateDataTable();
+    }
+    
+    function updateBadgePanel() {
+        const container = document.getElementById('fileBadgesContainer');
+        if (!container) return;
+        if (activeDatasets.length === 0) {
+            container.innerHTML = '<span style="color:#6f9aba;">📭 No curves — Upload CSV files</span>';
+            return;
+        }
+        let html = `<span style="font-size:0.75rem; font-weight:700;">📊 CURVES (${activeDatasets.length}):</span>`;
+        activeDatasets.forEach((ds, idx) => {
+            html += `
+                <div class="badge" style="border-left-color: ${ds.color};">
+                    <span style="color:${ds.color}; font-weight:bold;">●</span> 
+                    <strong>${escapeHtml(ds.label)}</strong>
+                    <button class="remove-curve-btn" data-index="${idx}" title="Remove">✕</button>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+        document.querySelectorAll('.remove-curve-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(btn.getAttribute('data-index'), 10);
+                if (!isNaN(idx)) removeCurveAtIndex(idx);
+            });
+        });
+    }
+    
+    function updateDataTable() {
+        const tbody = document.getElementById('tableBody');
+        if (!tbody) return;
+        if (activeDatasets.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">📭 No data available. Upload CSV files to view consolidated statistics.</td></tr>';
+            return;
+        }
+        let html = '';
+        for (let ds of activeDatasets) {
+            const stats = ds.stats;
+            if (stats) {
+                html += `
+                    <tr>
+                        <td style="font-weight:600; color:${ds.color};">${escapeHtml(stats.label)}</td>
+                        <td>${stats.count}</td>
+                        <td>${stats.minDisp.toFixed(3)}</td>
+                        <td>${stats.maxDisp.toFixed(3)}</td>
+                        <td>${stats.minLoad.toFixed(3)}</td>
+                        <td>${stats.maxLoad.toFixed(3)}</td>
+                        <td>${stats.avgLoad.toFixed(3)}</td>
+                    </tr>
+                `;
+            }
+        }
+        tbody.innerHTML = html;
+    }
+    
+    function removeCurveAtIndex(index) {
+        if (index >= 0 && index < activeDatasets.length) {
+            activeDatasets.splice(index, 1);
+            renderSplineGraph();
+            updateUI();
+            const msgDiv = document.getElementById('infoMessage');
+            msgDiv.innerHTML = `🗑 Curve removed. ${activeDatasets.length} spline curve(s) remaining.`;
+            if (activeDatasets.length === 0) {
+                msgDiv.innerHTML = `✨ All curves cleared. Upload CSV files to start.`;
+            }
+        }
+    }
+    
+    function clearAllCurves() {
+        activeDatasets = [];
+        resetColorCycle();
+        renderSplineGraph();
+        updateUI();
+        document.getElementById('infoMessage').innerHTML = `🧹 Cleared all curves. Upload CSV files to plot spline curves and view consolidated data.`;
+        const fileInput = document.getElementById('csvFilesInput');
+        if (fileInput) fileInput.value = '';
+    }
+    
+    // Render spline graph with proper axis scaling
+    function renderSplineGraph() {
+        const canvas = document.getElementById('consolidationSplineChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        
+        if (mainChart) {
+            mainChart.destroy();
+        }
+        
+        if (activeDatasets.length === 0) {
+            // Empty chart
+            mainChart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { position: 'top' },
+                        title: { 
+                            display: true, 
+                            text: '📈 Smooth Spline Curves — Load vs Displacement\nUpload CSV files to begin',
+                            font: { size: 14, weight: 'normal' },
+                            color: '#6c8eae'
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            title: { display: true, text: 'Displacement (mm)', font: { weight: 'bold', size: 12 } },
+                            min: 0,
+                            max: 10
+                        },
+                        y: { 
+                            title: { display: true, text: 'Load (kN)', font: { weight: 'bold', size: 12 } },
+                            min: 0,
+                            max: 10
+                        }
+                    },
+                    elements: { point: { radius: 0 }, line: { tension: 0.3 } }
+                }
+            });
+            return;
+        }
+        
+        // Calculate global min/max for all data points
+        let globalXMin = Infinity, globalXMax = -Infinity;
+        let globalYMin = Infinity, globalYMax = -Infinity;
+        
+        activeDatasets.forEach(ds => {
+            ds.dataPoints.forEach(p => {
+                if (p.x < globalXMin) globalXMin = p.x;
+                if (p.x > globalXMax) globalXMax = p.x;
+                if (p.y < globalYMin) globalYMin = p.y;
+                if (p.y > globalYMax) globalYMax = p.y;
+            });
+        });
+        
+        // Set defaults if no data
+        if (!isFinite(globalXMin)) globalXMin = 0;
+        if (!isFinite(globalXMax)) globalXMax = 10;
+        if (!isFinite(globalYMin)) globalYMin = 0;
+        if (!isFinite(globalYMax)) globalYMax = 10;
+        
+        // Add padding (10% on each side)
+        const xRange = globalXMax - globalXMin;
+        const yRange = globalYMax - globalYMin;
+        const xPadding = xRange * 0.1 || 0.5;
+        const yPadding = yRange * 0.1 || 0.5;
+        
+        const xMin = globalXMin - xPadding;
+        const xMax = globalXMax + xPadding;
+        const yMin = Math.max(0, globalYMin - yPadding);
+        const yMax = globalYMax + yPadding;
+        
+        // Prepare datasets for Chart.js
+        const chartDatasets = activeDatasets.map(ds => {
+            const sortedPoints = [...ds.dataPoints].sort((a, b) => a.x - b.x);
+            return {
+                label: ds.label,
+                data: sortedPoints,
+                borderColor: ds.color,
+                backgroundColor: 'transparent',
+                borderWidth: 2.8,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                pointHoverBackgroundColor: ds.color,
+                tension: 0.3,
+                fill: false,
+                showLine: true,
+                spanGaps: false
+            };
+        });
+        
+        // Create new chart
+        mainChart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets: chartDatasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                interaction: { 
+                    mode: 'index', 
+                    intersect: false 
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} kN @ ${context.parsed.x.toFixed(3)} mm`;
+                            }
+                        },
+                        mode: 'nearest',
+                        intersect: false
+                    },
+                    legend: { 
+                        position: 'top',
+                        labels: { 
+                            font: { size: 10, weight: '500' },
+                            boxWidth: 12,
+                            padding: 10
+                        }
+                    },
+                    title: { 
+                        display: true, 
+                        text: `🌀 Consolidation Plot — ${activeDatasets.length} Smooth Spline Curve(s)`,
+                        font: { size: 13, weight: 'bold' },
+                        padding: { top: 5, bottom: 10 }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        title: { 
+                            display: true, 
+                            text: 'Displacement (mm)', 
+                            font: { weight: 'bold', size: 12 } 
+                        },
+                        min: xMin,
+                        max: xMax,
+                        grid: { color: '#e9ecef', drawBorder: true },
+                        ticks: { 
+                            stepSize: xRange / 10,
+                            callback: function(val) { return val.toFixed(2); }
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        title: { 
+                            display: true, 
+                            text: 'Load (kN)', 
+                            font: { weight: 'bold', size: 12 } 
+                        },
+                        min: yMin,
+                        max: yMax,
+                        grid: { color: '#e9ecef' },
+                        ticks: { 
+                            stepSize: yRange / 10,
+                            callback: function(val) { return val.toFixed(2); }
+                        }
+                    }
+                },
+                elements: {
+                    point: { 
+                        radius: 0,
+                        hoverRadius: 4,
+                        hitRadius: 8
+                    },
+                    line: { 
+                        tension: 0.3, 
+                        borderWidth: 2.8,
+                        fill: false
+                    }
+                }
+            }
+        });
+        
+        // Log for debugging
+        console.log(`Graph rendered with ${activeDatasets.length} datasets`);
+        console.log(`X range: ${xMin.toFixed(2)} to ${xMax.toFixed(2)}`);
+        console.log(`Y range: ${yMin.toFixed(2)} to ${yMax.toFixed(2)}`);
+    }
+    
+    // Add files to graph and update consolidated data
+    async function addFilesToGraph(files) {
+        if (!files || files.length === 0) {
+            document.getElementById('infoMessage').innerHTML = '⚠️ Please select CSV files.';
+            return;
+        }
+        
+        const infoDiv = document.getElementById('infoMessage');
+        infoDiv.innerHTML = '⏳ Parsing CSV files...';
+        
+        const successful = [];
+        const errors = [];
+        
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            try {
+                const points = await parseCsvToPoints(file, file.name);
+                successful.push({ fileName: file.name, points });
+            } catch (err) {
+                errors.push(`${file.name}: ${err.message}`);
+            }
+        }
+        
+        if (successful.length === 0) {
+            infoDiv.innerHTML = `❌ No valid data. ${errors.join('; ')}`;
+            return;
+        }
+        
+        for (let s of successful) {
+            const label = makeLabel(s.fileName);
+            const color = getNewColor();
+            const stats = computeStats(s.points, label);
+            activeDatasets.push({
+                label: label,
+                dataPoints: s.points,
+                color: color,
+                stats: stats,
+                id: Date.now() + Math.random()
+            });
+        }
+        
+        renderSplineGraph();
+        updateUI();
+        
+        let msg = `✅ Added ${successful.length} curve(s). Total: ${activeDatasets.length} datasets.`;
+        if (errors.length) msg += ` ⚠️ Errors: ${errors.join('; ')}`;
+        msg += `<br>📋 Consolidated data table updated with statistics.`;
+        infoDiv.innerHTML = msg;
+        
+        const fileInput = document.getElementById('csvFilesInput');
+        if (fileInput) fileInput.value = '';
+    }
+    
+    // JPEG Export function
+    async function exportAsJPEG() {
+        const chartContainer = document.getElementById('chartContainer');
+        if (!chartContainer) {
+            alert('Chart container not found');
+            return;
+        }
+        
+        const exportBtn = document.getElementById('exportJPEGBtn');
+        const originalText = exportBtn.innerHTML;
+        exportBtn.innerHTML = '⏳ Capturing...';
+        exportBtn.disabled = true;
+        
+        try {
+            const canvas = await html2canvas(chartContainer, {
+                scale: 2.5,
+                backgroundColor: '#ffffff',
+                logging: false,
+                useCORS: false
+            });
+            
+            const link = document.createElement('a');
+            link.download = `consolidation_plot_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.jpeg`;
+            link.href = canvas.toDataURL('image/jpeg', 0.95);
+            link.click();
+            
+            exportBtn.innerHTML = '✅ Exported!';
+            setTimeout(() => { exportBtn.innerHTML = originalText; }, 1500);
+        } catch (error) {
+            console.error('Export error:', error);
+            alert('Failed to export image. Please try again.');
+            exportBtn.innerHTML = originalText;
+        } finally {
+            exportBtn.disabled = false;
+        }
+    }
+    
+    function escapeHtml(str) {
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+    
+    // Event Listeners
+    document.getElementById('plotBtn').addEventListener('click', () => {
+        const fileInput = document.getElementById('csvFilesInput');
+        if (!fileInput.files || fileInput.files.length === 0) {
+            document.getElementById('infoMessage').innerHTML = '⚠️ No files selected. Please choose CSV files.';
+            return;
+        }
+        addFilesToGraph(fileInput.files);
+    });
+    
+    document.getElementById('clearAllBtn').addEventListener('click', () => {
+        clearAllCurves();
+    });
+    
+    document.getElementById('exportJPEGBtn').addEventListener('click', () => {
+        exportAsJPEG();
+    });
+    
+    // Initialize empty chart
+    window.addEventListener('DOMContentLoaded', () => {
+        const ctx = document.getElementById('consolidationSplineChart').getContext('2d');
+        mainChart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'top' },
+                    title: { 
+                        display: true, 
+                        text: '📈 Smooth Spline Curves — Load vs Displacement\nUpload CSV files to begin',
+                        font: { size: 14 }
+                    }
+                },
+                scales: {
+                    x: { 
+                        title: { display: true, text: 'Displacement (mm)' },
+                        min: 0,
+                        max: 10
+                    },
+                    y: { 
+                        title: { display: true, text: 'Load (kN)' },
+                        min: 0,
+                        max: 10
+                    }
+                },
+                elements: { point: { radius: 0 }, line: { tension: 0.3 } }
+            }
+        });
+        updateUI();
+        document.getElementById('infoMessage').innerHTML = '✨ Ready: Upload CSV files to plot smooth spline curves. Consolidated data table and JPEG export available below.';
+    });
+</script>
+</body>
+</html>
